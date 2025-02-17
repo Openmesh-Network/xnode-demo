@@ -1,5 +1,5 @@
 {
-  description = "Rust app running on Xnode!";
+  description = "Xnode demo trials";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";
