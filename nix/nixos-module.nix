@@ -31,10 +31,19 @@ in
         '';
       };
 
+      verbosity = lib.mkOption {
+        type = lib.types.str;
+        default = "warn";
+        example = "info";
+        description = ''
+          The logging verbosity that the app should use.
+        '';
+      };
+
       dataDir = lib.mkOption {
         type = lib.types.str;
-        default = "/var/lib/xnode-manager";
-        example = "/var/lib/xnode-manager";
+        default = "/var/lib/xnode-demo";
+        example = "/var/lib/xnode-demo";
         description = ''
           The main directory to store data.
         '';
@@ -43,7 +52,7 @@ in
       reservationsDir = lib.mkOption {
         type = lib.types.str;
         default = "${cfg.dataDir}/reservation";
-        example = "/var/lib/xnode-manager/reservation";
+        example = "/var/lib/xnode-demo/reservation";
         description = ''
           The directory to store Xnode reservations.
         '';
@@ -80,6 +89,7 @@ in
       environment = {
         HOSTNAME = cfg.hostname;
         PORT = toString cfg.port;
+        RUST_LOG = cfg.verbosity;
         DATADIR = cfg.dataDir;
         RESERVATIONSDIR = cfg.reservationsDir;
         RESERVATIONDURATION = toString cfg.reservationDuration;

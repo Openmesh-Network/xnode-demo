@@ -1,4 +1,4 @@
-use log::warn;
+use log::{error, warn};
 use std::{
     env::var,
     path::{Path, PathBuf},
@@ -37,7 +37,7 @@ pub fn reservationduration() -> u64 {
         .and_then(|s| {
             str::parse::<u64>(&s)
                 .inspect_err(|e| {
-                    warn!("Could not parse RESERVATIONDURATION to u64: {}", e);
+                    error!("Could not parse RESERVATIONDURATION to u64: {}", e);
                 })
                 .ok()
         })
@@ -47,5 +47,5 @@ pub fn reservationduration() -> u64 {
 pub fn xnodes() -> Vec<String> {
     env_var("XNODES")
         .map(|d| d.split_whitespace().map(|s| s.to_owned()).collect())
-        .unwrap_or(vec![])
+        .unwrap_or_default()
 }

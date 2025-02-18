@@ -18,7 +18,7 @@ pub fn get_signer() -> SecretKey {
                 );
             })
             .ok()
-            .unwrap_or_else(|| generate_private_key()),
+            .unwrap_or_else(generate_private_key),
         Err(e) => {
             warn!("Could not read private key {}: {}", path.display(), e);
 
@@ -36,7 +36,7 @@ fn generate_private_key() -> [u8; 32] {
     let priv_key = random_bytes();
 
     let path = datadir().join("secret.key");
-    if let Err(e) = write(&path, &priv_key) {
+    if let Err(e) = write(&path, priv_key) {
         error!("Could not save private key {}: {}", path.display(), e);
     }
 

@@ -8,6 +8,8 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
+
     // Create data directories
     {
         let dir = datadir();

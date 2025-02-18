@@ -1,11 +1,13 @@
 use actix_web::HttpResponse;
 use ethsign::Signature;
-use reqwest::Client;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::utils::error::ResponseError;
 
 use super::{
+    keccak::hash_message,
     networking::{request, Request, RequestType},
     wallet::get_signer,
 };
@@ -24,10 +26,23 @@ pub fn as_client<T: FnOnce(&Client) -> Option<HttpResponse>>(
     xnode_id: &str,
     action: T,
 ) -> Option<HttpResponse> {
-    let client = reqwest::Client::new();
+    let client = match Client::builder()
+        .cookie_store(true)
+        .timeout(Some(Duration::from_secs(600)))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            log::error!("Could not build client: {}", e);
+            return Some(HttpResponse::InternalServerError().json(ResponseError::new(
+                "Networking client could not be created.",
+            )));
+        }
+    };
     let signer = get_signer();
-    let message = "Create Xnode Manager session";
-    let signature: Signature = match signer.sign(message.as_bytes()) {
+    let message = String::from("Create Xnode Manager session");
+    let message_bytes = hash_message(&message);
+    let signature: Signature = match signer.sign(&message_bytes) {
         Ok(sig) => sig,
         Err(e) => {
             log::error!("Could not sign login message {}: {}", message, e);

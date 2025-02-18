@@ -1,6 +1,5 @@
 use actix_web::HttpResponse;
-use futures::executor::block_on;
-use reqwest::Client;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -28,34 +27,34 @@ pub fn request<T: Serialize + Debug>(
     client: &Client,
     request: &Request<T>,
 ) -> Result<Response, HttpResponse> {
+    println!("Sending request {:?}", request);
+
     let result = match &request.request_type {
-        RequestType::Get { path } => {
-            block_on(client.get(format!("{}/{}", request.xnode_id, path)).send())
-        }
-        RequestType::Post { path, body } => block_on(
-            client
-                .post(format!("{}/{}", request.xnode_id, path))
-                .json(&body)
-                .send(),
-        ),
+        RequestType::Get { path } => client.get(format!("{}/{}", request.xnode_id, path)).send(),
+        RequestType::Post { path, body } => client
+            .post(format!("{}/{}", request.xnode_id, path))
+            .json(&body)
+            .send(),
     };
+
+    println!("Request result {:?}", result);
 
     match result {
         Ok(response) => {
             let status = response.status().as_u16();
-            match block_on(response.text()) {
+            match response.text() {
                 Ok(body) => Ok(Response { status, body }),
                 Err(e) => {
                     log::error!("Could not decode response {:?}: {}", request, e);
-                    return Err(HttpResponse::InternalServerError()
-                        .json(ResponseError::new("Received invalid response.")));
+                    Err(HttpResponse::InternalServerError()
+                        .json(ResponseError::new("Received invalid response.")))
                 }
             }
         }
         Err(e) => {
             log::error!("Could not perform request {:?}: {}", request, e);
-            return Err(HttpResponse::InternalServerError()
-                .json(ResponseError::new("Could not perform request.")));
+            Err(HttpResponse::InternalServerError()
+                .json(ResponseError::new("Could not perform request.")))
         }
     }
 }
