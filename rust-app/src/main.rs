@@ -37,7 +37,8 @@ async fn main() -> std::io::Result<()> {
                     .allowed_origin("https://studio.openxai.org")
                     .allowed_origin_fn(|origin, _req_head| {
                         origin.as_bytes().starts_with(b"http://localhost")
-                    }),
+                    })
+                    .allowed_methods(vec!["GET", "POST"]),
             )
             .service(web::scope("/demo").configure(demo::configure))
     })
