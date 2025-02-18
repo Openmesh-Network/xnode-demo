@@ -1,4 +1,4 @@
-use log::{error, warn};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::fs::{read_to_string, remove_file};
 use std::time::SystemTime;

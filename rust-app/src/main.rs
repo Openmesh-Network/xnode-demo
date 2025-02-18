@@ -1,5 +1,6 @@
 use std::fs::create_dir_all;
 
+use actix_cors::Cors;
 use actix_web::{web, App, HttpServer};
 use utils::env::{datadir, hostname, port, reservationsdir};
 
@@ -29,8 +30,18 @@ async fn main() -> std::io::Result<()> {
     }
 
     // Start server
-    HttpServer::new(move || App::new().service(web::scope("/demo").configure(demo::configure)))
-        .bind(format!("{}:{}", hostname(), port()))?
-        .run()
-        .await
+    HttpServer::new(move || {
+        App::new()
+            .wrap(
+                Cors::default()
+                    .allowed_origin("https://studio.openxai.org")
+                    .allowed_origin_fn(|origin, _req_head| {
+                        origin.as_bytes().starts_with(b"http://localhost")
+                    }),
+            )
+            .service(web::scope("/demo").configure(demo::configure))
+    })
+    .bind(format!("{}:{}", hostname(), port()))?
+    .run()
+    .await
 }
