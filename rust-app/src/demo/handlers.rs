@@ -117,7 +117,7 @@ async fn set_app(app: web::Json<SetApp>, request: HttpRequest) -> impl Responder
                         container: format!(
                             "{}",
                             request.peer_addr().expect("IP address on connection is not set, while set before during reservation validation.").ip()
-                        ),
+                        ).replace(".", "-"),
                         config: ContainerConfiguration {flake: app.flake.clone()}
                     }],
                 },

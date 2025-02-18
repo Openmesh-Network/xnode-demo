@@ -72,7 +72,7 @@ pub fn get_xnode(xnode_id: String) -> Xnode {
                                     request_type: networking::RequestType::Post {
                                         path: String::from("config/change"),
                                         body: vec![ConfigurationAction::Remove {
-                                            container: reservation.reserved_by,
+                                            container: reservation.reserved_by.replace(".", "-"),
                                             backup: false,
                                         }],
                                     },
