@@ -32,14 +32,7 @@ async fn main() -> std::io::Result<()> {
     // Start server
     HttpServer::new(move || {
         App::new()
-            .wrap(
-                Cors::default()
-                    .allowed_origin("https://studio.openxai.org")
-                    .allowed_origin_fn(|origin, _req_head| {
-                        origin.as_bytes().starts_with(b"http://localhost")
-                    })
-                    .allowed_methods(vec!["GET", "POST"]),
-            )
+            .wrap(Cors::permissive())
             .service(web::scope("/demo").configure(demo::configure))
     })
     .bind(format!("{}:{}", hostname(), port()))?
