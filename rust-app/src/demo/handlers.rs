@@ -46,8 +46,8 @@ async fn reserve(reserve: web::Json<Reserve>, request: HttpRequest) -> impl Resp
     }
 
     let reserved_by: String;
-    if let Some(addr) = request.peer_addr() {
-        reserved_by = format!("{}", addr.ip());
+    if let Some(addr) = request.connection_info().realip_remote_addr() {
+        reserved_by = addr.to_string();
     } else {
         return HttpResponse::BadRequest()
             .json(ResponseError::new("IP address on connection is not set."));
@@ -114,10 +114,7 @@ async fn set_app(app: web::Json<SetApp>, request: HttpRequest) -> impl Responder
                 request_type: networking::RequestType::Post {
                     path: String::from("config/change"),
                     body: vec![ConfigurationAction::Set {
-                        container: format!(
-                            "{}",
-                            request.peer_addr().expect("IP address on connection is not set, while set before during reservation validation.").ip()
-                        ).replace(".", "-"),
+                        container: request.connection_info().realip_remote_addr().expect("IP address on connection is not set, while set before during reservation validation.").to_string().replace(".", "-"),
                         config: ContainerConfiguration {flake: app.flake.clone()}
                     }],
                 },
@@ -181,8 +178,8 @@ fn check_reservation(xnode_id: &String, request: &HttpRequest) -> Option<HttpRes
     }
 
     let reserved_by: String;
-    if let Some(addr) = request.peer_addr() {
-        reserved_by = format!("{}", addr.ip());
+    if let Some(addr) = request.connection_info().realip_remote_addr() {
+        reserved_by = addr.to_string();
     } else {
         return Some(
             HttpResponse::BadRequest()
