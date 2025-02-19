@@ -40,7 +40,11 @@
 
               networking = {
                 firewall.allowedTCPPorts = [ 35963 ];
+
+                useHostResolvConf = nixpkgs.lib.mkForce false;
               };
+
+              services.resolved.enable = true;
 
               system.stateVersion = "25.05";
             }
