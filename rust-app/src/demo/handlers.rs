@@ -150,7 +150,8 @@ async fn forward_request(frequest: web::Json<ForwardRequest>) -> impl Responder 
         | networking::RequestType::Post { path, body: _ }) = &frequest.request.request_type;
         if path.starts_with("processes") {
             // Reserver only endpoint
-            if let Some(response) = check_reservation(&frequest.xnode_id, &frequest.secret) {
+            if let Some(response) = check_reservation(&frequest.request.xnode_id, &frequest.secret)
+            {
                 return response;
             }
         } else if !path.starts_with("usage") {
@@ -160,7 +161,7 @@ async fn forward_request(frequest: web::Json<ForwardRequest>) -> impl Responder 
     }
 
     let mut forward_response: Option<networking::Response> = None;
-    if let Some(response) = as_client(&frequest.xnode_id, |client| {
+    if let Some(response) = as_client(&frequest.request.xnode_id, |client| {
         match networking::request(client, &frequest.request) {
             Ok(fresponse) => {
                 forward_response = Some(fresponse);

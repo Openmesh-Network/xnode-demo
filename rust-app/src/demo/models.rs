@@ -22,7 +22,6 @@ pub struct SetApp {
 
 #[derive(Serialize, Deserialize)]
 pub struct ForwardRequest {
-    pub xnode_id: String,
     pub secret: String,
     pub request: networking::Request<serde_json::Value>,
 }
