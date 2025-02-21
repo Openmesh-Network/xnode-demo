@@ -1,6 +1,4 @@
-use actix_web::{
-    body::BoxBody, get, http::StatusCode, post, web, HttpRequest, HttpResponse, Responder,
-};
+use actix_web::{body::BoxBody, get, http::StatusCode, post, web, HttpResponse, Responder};
 use hex::ToHex;
 use rand::{rng, Rng};
 use std::fs::write;
@@ -34,7 +32,7 @@ async fn xnodes() -> impl Responder {
     let xnodes: Vec<PublicXnode> = get_xnodes()
         .into_iter()
         .map(|xnode| PublicXnode {
-            xnode_id: xnode.id,
+            id: xnode.id,
             reserved_until: xnode
                 .reservation
                 .map(|reservation| reservation.reserved_until),

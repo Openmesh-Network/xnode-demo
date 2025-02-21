@@ -4,7 +4,7 @@ use crate::utils::networking;
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicXnode {
-    pub xnode_id: String,
+    pub id: String,
     pub reserved_until: Option<u64>,
 }
 
