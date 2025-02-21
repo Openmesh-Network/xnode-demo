@@ -9,7 +9,7 @@ use super::{auth::as_client, networking};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Reservation {
-    pub reserved_by: String,
+    pub secret: String,
     pub reserved_until: u64,
 }
 
@@ -72,7 +72,7 @@ pub fn get_xnode(xnode_id: String) -> Xnode {
                                     request_type: networking::RequestType::Post {
                                         path: String::from("config/change"),
                                         body: vec![ConfigurationAction::Remove {
-                                            container: reservation.reserved_by.replace(".", "-"),
+                                            container: reservation.secret,
                                             backup: false,
                                         }],
                                     },

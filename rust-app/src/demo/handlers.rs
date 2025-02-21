@@ -2,11 +2,12 @@ use actix_web::{
     body::BoxBody, get, http::StatusCode, post, web, HttpRequest, HttpResponse, Responder,
 };
 use hex::ToHex;
+use rand::{rng, Rng};
 use std::fs::write;
 use std::time::SystemTime;
 
 use crate::{
-    demo::models::{Reserve, SetApp},
+    demo::models::{ForwardRequest, PublicXnode, Reserve, SetApp},
     utils::{
         auth::as_client,
         env::{self, reservationduration, reservationsdir},
@@ -30,11 +31,21 @@ async fn address() -> impl Responder {
 
 #[get("/xnodes")]
 async fn xnodes() -> impl Responder {
-    HttpResponse::Ok().json(get_xnodes())
+    let xnodes: Vec<PublicXnode> = get_xnodes()
+        .into_iter()
+        .map(|xnode| PublicXnode {
+            xnode_id: xnode.id,
+            reserved_until: xnode
+                .reservation
+                .map(|reservation| reservation.reserved_until),
+        })
+        .collect();
+
+    HttpResponse::Ok().json(xnodes)
 }
 
 #[post("/reserve")]
-async fn reserve(reserve: web::Json<Reserve>, request: HttpRequest) -> impl Responder {
+async fn reserve(reserve: web::Json<Reserve>) -> impl Responder {
     let xnode_id = reserve.xnode_id.clone();
     if !env::xnodes().contains(&xnode_id) {
         return HttpResponse::BadRequest().json(ResponseError::new("Invalid Xnode id."));
@@ -45,13 +56,7 @@ async fn reserve(reserve: web::Json<Reserve>, request: HttpRequest) -> impl Resp
         return HttpResponse::BadRequest().json(ResponseError::new("Xnode is already reserved."));
     }
 
-    let reserved_by: String;
-    if let Some(addr) = request.connection_info().realip_remote_addr() {
-        reserved_by = addr.to_string();
-    } else {
-        return HttpResponse::BadRequest()
-            .json(ResponseError::new("IP address on connection is not set."));
-    }
+    let secret = generate_secret();
 
     let system_time = SystemTime::now();
     let reserved_until = match system_time.duration_since(SystemTime::UNIX_EPOCH) {
@@ -68,7 +73,7 @@ async fn reserve(reserve: web::Json<Reserve>, request: HttpRequest) -> impl Resp
     };
 
     let reservation = Reservation {
-        reserved_by,
+        secret,
         reserved_until,
     };
     let reservation_json: String = match serde_json::to_string(&reservation) {
@@ -100,8 +105,8 @@ async fn reserve(reserve: web::Json<Reserve>, request: HttpRequest) -> impl Resp
 }
 
 #[post("/set_app")]
-async fn set_app(app: web::Json<SetApp>, request: HttpRequest) -> impl Responder {
-    if let Some(response) = check_reservation(&app.xnode_id, &request) {
+async fn set_app(app: web::Json<SetApp>) -> impl Responder {
+    if let Some(response) = check_reservation(&app.xnode_id, &app.secret) {
         return response;
     }
 
@@ -114,8 +119,10 @@ async fn set_app(app: web::Json<SetApp>, request: HttpRequest) -> impl Responder
                 request_type: networking::RequestType::Post {
                     path: String::from("config/change"),
                     body: vec![ConfigurationAction::Set {
-                        container: request.connection_info().realip_remote_addr().expect("IP address on connection is not set, while set before during reservation validation.").to_string().replace(".", "-"),
-                        config: ContainerConfiguration {flake: app.flake.clone()}
+                        container: app.secret.clone(),
+                        config: ContainerConfiguration {
+                            flake: app.flake.clone(),
+                        },
                     }],
                 },
             },
@@ -137,25 +144,24 @@ async fn set_app(app: web::Json<SetApp>, request: HttpRequest) -> impl Responder
 }
 
 #[post("/forward_request")]
-async fn forward_request(
-    frequest: web::Json<networking::Request<serde_json::Value>>,
-    request: HttpRequest,
-) -> impl Responder {
+async fn forward_request(frequest: web::Json<ForwardRequest>) -> impl Responder {
     {
         let (networking::RequestType::Get { path }
-        | networking::RequestType::Post { path, body: _ }) = &frequest.request_type;
-        if !path.starts_with("processes") && !path.starts_with("usage") {
+        | networking::RequestType::Post { path, body: _ }) = &frequest.request.request_type;
+        if path.starts_with("processes") {
+            // Reserver only endpoint
+            if let Some(response) = check_reservation(&frequest.xnode_id, &frequest.secret) {
+                return response;
+            }
+        } else if !path.starts_with("usage") {
+            // Not a public endpoint
             return HttpResponse::BadRequest().json(ResponseError::new("Invalid path."));
         }
     }
 
-    if let Some(response) = check_reservation(&frequest.xnode_id, &request) {
-        return response;
-    }
-
     let mut forward_response: Option<networking::Response> = None;
     if let Some(response) = as_client(&frequest.xnode_id, |client| {
-        match networking::request(client, &frequest) {
+        match networking::request(client, &frequest.request) {
             Ok(fresponse) => {
                 forward_response = Some(fresponse);
             }
@@ -172,29 +178,20 @@ async fn forward_request(
     respond(forward_response)
 }
 
-fn check_reservation(xnode_id: &String, request: &HttpRequest) -> Option<HttpResponse> {
+fn check_reservation(xnode_id: &String, secret: &String) -> Option<HttpResponse> {
     if !env::xnodes().contains(xnode_id) {
         return Some(HttpResponse::BadRequest().json(ResponseError::new("Invalid Xnode id.")));
-    }
-
-    let reserved_by: String;
-    if let Some(addr) = request.connection_info().realip_remote_addr() {
-        reserved_by = addr.to_string();
-    } else {
-        return Some(
-            HttpResponse::BadRequest()
-                .json(ResponseError::new("IP address on connection is not set.")),
-        );
     }
 
     let xnode = get_xnode(xnode_id.clone());
     match xnode.reservation {
         Some(reservation) => {
-            if reservation.reserved_by != reserved_by {
-                return Some(HttpResponse::BadRequest().json(ResponseError::new(format!(
-                    "Xnode is reserved by {}, not {}.",
-                    reservation.reserved_by, reserved_by
-                ))));
+            if &reservation.secret != secret {
+                return Some(
+                    HttpResponse::BadRequest().json(ResponseError::new(String::from(
+                        "Invalid reservation secret.",
+                    ))),
+                );
             }
         }
         Option::None => {
@@ -227,4 +224,14 @@ fn respond(forward: Option<networking::Response>) -> HttpResponse {
     }
 
     HttpResponse::Ok().finish()
+}
+
+fn generate_secret() -> String {
+    let secret: String = rng()
+        .sample_iter(rand::distr::Alphanumeric)
+        .take(12)
+        .map(char::from)
+        .collect();
+
+    format!("demoprefix{}", secret)
 }
