@@ -1,8 +1,8 @@
 use actix_web::HttpResponse;
 use ethsign::Signature;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{future::Future, sync::Arc, time::Duration};
 
 use crate::utils::error::ResponseError;
 
@@ -22,19 +22,20 @@ struct Login {
     pub login_method: LoginMethod,
 }
 
-pub fn as_client<T: FnOnce(&Client) -> Option<HttpResponse>>(
-    xnode_id: &str,
-    action: T,
-) -> Option<HttpResponse> {
+pub async fn as_client<T, F, Fut>(xnode_id: &str, action: F) -> Result<T, HttpResponse>
+where
+    F: FnOnce(Arc<Client>) -> Fut,
+    Fut: Future<Output = Result<T, HttpResponse>>,
+{
     let client = match Client::builder()
         .cookie_store(true)
-        .timeout(Some(Duration::from_secs(600)))
+        .timeout(Duration::from_secs(600))
         .build()
     {
-        Ok(c) => c,
+        Ok(c) => Arc::new(c),
         Err(e) => {
             log::error!("Could not build client: {}", e);
-            return Some(HttpResponse::InternalServerError().json(ResponseError::new(
+            return Err(HttpResponse::InternalServerError().json(ResponseError::new(
                 "Networking client could not be created.",
             )));
         }
@@ -46,14 +47,12 @@ pub fn as_client<T: FnOnce(&Client) -> Option<HttpResponse>>(
         Ok(sig) => sig,
         Err(e) => {
             log::error!("Could not sign login message {}: {}", message, e);
-            return Some(
-                HttpResponse::InternalServerError()
-                    .json(ResponseError::new("New configuration could not be signed.")),
-            );
+            return Err(HttpResponse::InternalServerError()
+                .json(ResponseError::new("New configuration could not be signed.")));
         }
     };
 
-    if let Err(e) = request(
+    request(
         &client,
         &Request {
             xnode_id: xnode_id.to_string(),
@@ -68,15 +67,12 @@ pub fn as_client<T: FnOnce(&Client) -> Option<HttpResponse>>(
                 },
             },
         },
-    ) {
-        return Some(e);
-    }
+    )
+    .await?;
 
-    if let Some(e) = action(&client) {
-        return Some(e);
-    }
+    let result = action(client.clone()).await;
 
     let _logout_result = client.post(format!("{}/auth/logout", xnode_id)).send();
 
-    None
+    result
 }

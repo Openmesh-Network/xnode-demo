@@ -30,6 +30,7 @@ async fn address() -> impl Responder {
 #[get("/xnodes")]
 async fn xnodes() -> impl Responder {
     let xnodes: Vec<PublicXnode> = get_xnodes()
+        .await
         .into_iter()
         .map(|xnode| PublicXnode {
             id: xnode.id,
@@ -49,7 +50,7 @@ async fn reserve(reserve: web::Json<Reserve>) -> impl Responder {
         return HttpResponse::BadRequest().json(ResponseError::new("Invalid Xnode id."));
     }
 
-    let xnode = get_xnode(xnode_id);
+    let xnode = get_xnode(xnode_id).await;
     if xnode.reservation.is_some() {
         return HttpResponse::BadRequest().json(ResponseError::new("Xnode is already reserved."));
     }
@@ -99,19 +100,18 @@ async fn reserve(reserve: web::Json<Reserve>) -> impl Responder {
             .json(ResponseError::new("Xnode could not be reserved."));
     }
 
-    HttpResponse::Ok().json(get_xnode(xnode.id))
+    HttpResponse::Ok().json(get_xnode(xnode.id).await)
 }
 
 #[post("/set_app")]
 async fn set_app(app: web::Json<SetApp>) -> impl Responder {
-    if let Some(response) = check_reservation(&app.xnode_id, &app.secret) {
+    if let Some(response) = check_reservation(&app.xnode_id, &app.secret).await {
         return response;
     }
 
-    let mut forward_response: Option<networking::Response> = None;
-    if let Some(response) = as_client(&app.xnode_id, |client| {
-        match networking::request(
-            client,
+    match as_client(&app.xnode_id.clone(), |client| async move {
+        networking::request(
+            &client,
             &networking::Request {
                 xnode_id: app.xnode_id.clone(),
                 request_type: networking::RequestType::Post {
@@ -124,21 +124,14 @@ async fn set_app(app: web::Json<SetApp>) -> impl Responder {
                     }],
                 },
             },
-        ) {
-            Ok(fresponse) => {
-                forward_response = Some(fresponse);
-            }
-            Err(e) => {
-                return Some(e);
-            }
-        }
-
-        None
-    }) {
-        return response;
+        )
+        .await
+    })
+    .await
+    {
+        Ok(forward_response) => respond(forward_response),
+        Err(e) => e,
     }
-
-    respond(forward_response)
 }
 
 #[post("/forward_request")]
@@ -148,7 +141,8 @@ async fn forward_request(frequest: web::Json<ForwardRequest>) -> impl Responder 
         | networking::RequestType::Post { path, body: _ }) = &frequest.request.request_type;
         if path.starts_with("processes") {
             // Reserver only endpoint
-            if let Some(response) = check_reservation(&frequest.request.xnode_id, &frequest.secret)
+            if let Some(response) =
+                check_reservation(&frequest.request.xnode_id, &frequest.secret).await
             {
                 return response;
             }
@@ -158,31 +152,22 @@ async fn forward_request(frequest: web::Json<ForwardRequest>) -> impl Responder 
         }
     }
 
-    let mut forward_response: Option<networking::Response> = None;
-    if let Some(response) = as_client(&frequest.request.xnode_id, |client| {
-        match networking::request(client, &frequest.request) {
-            Ok(fresponse) => {
-                forward_response = Some(fresponse);
-            }
-            Err(e) => {
-                return Some(e);
-            }
-        }
-
-        None
-    }) {
-        return response;
+    match as_client(&frequest.request.xnode_id.clone(), |client| async move {
+        networking::request(&client, &frequest.request).await
+    })
+    .await
+    {
+        Ok(forward_response) => respond(forward_response),
+        Err(e) => e,
     }
-
-    respond(forward_response)
 }
 
-fn check_reservation(xnode_id: &String, secret: &String) -> Option<HttpResponse> {
+async fn check_reservation(xnode_id: &String, secret: &String) -> Option<HttpResponse> {
     if !env::xnodes().contains(xnode_id) {
         return Some(HttpResponse::BadRequest().json(ResponseError::new("Invalid Xnode id.")));
     }
 
-    let xnode = get_xnode(xnode_id.clone());
+    let xnode = get_xnode(xnode_id.clone()).await;
     match xnode.reservation {
         Some(reservation) => {
             if &reservation.secret != secret {
@@ -203,26 +188,20 @@ fn check_reservation(xnode_id: &String, secret: &String) -> Option<HttpResponse>
     None
 }
 
-fn respond(forward: Option<networking::Response>) -> HttpResponse {
-    if let Some(response) = forward {
-        match StatusCode::from_u16(response.status) {
-            Ok(status_code) => {
-                return HttpResponse::with_body(status_code, BoxBody::new(response.body));
-            }
-            Err(e) => {
-                log::error!(
-                    "Could not translate reqwest status code {} into actix status code: {}",
-                    response.status,
-                    e
-                );
-                return HttpResponse::InternalServerError().json(ResponseError::new(
-                    "Status code of response could not be parsed.",
-                ));
-            }
+fn respond(response: networking::Response) -> HttpResponse {
+    match StatusCode::from_u16(response.status) {
+        Ok(status_code) => HttpResponse::with_body(status_code, BoxBody::new(response.body)),
+        Err(e) => {
+            log::error!(
+                "Could not translate reqwest status code {} into actix status code: {}",
+                response.status,
+                e
+            );
+            HttpResponse::InternalServerError().json(ResponseError::new(
+                "Status code of response could not be parsed.",
+            ))
         }
     }
-
-    HttpResponse::Ok().finish()
 }
 
 fn generate_secret() -> String {

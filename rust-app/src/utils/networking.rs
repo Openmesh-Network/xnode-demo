@@ -1,5 +1,5 @@
 use actix_web::HttpResponse;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -23,7 +23,7 @@ pub struct Response {
     pub body: String,
 }
 
-pub fn request<T: Serialize + Debug>(
+pub async fn request<T: Serialize + Debug>(
     client: &Client,
     request: &Request<T>,
 ) -> Result<Response, HttpResponse> {
@@ -35,14 +35,15 @@ pub fn request<T: Serialize + Debug>(
             .post(format!("{}/{}", request.xnode_id, path))
             .json(&body)
             .send(),
-    };
+    }
+    .await;
 
     println!("Request result {:?}", result);
 
     match result {
         Ok(response) => {
             let status = response.status().as_u16();
-            match response.text() {
+            match response.text().await {
                 Ok(body) => Ok(Response { status, body }),
                 Err(e) => {
                     log::error!("Could not decode response {:?}: {}", request, e);

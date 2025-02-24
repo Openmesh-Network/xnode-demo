@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::fs::{read_to_string, remove_file};
@@ -40,7 +41,7 @@ pub enum ConfigurationAction {
     },
 }
 
-pub fn get_xnode(xnode_id: String) -> Xnode {
+pub async fn get_xnode(xnode_id: String) -> Xnode {
     let path = reservationsdir().join(path_safe_id(&xnode_id));
 
     Xnode {
@@ -64,22 +65,26 @@ pub fn get_xnode(xnode_id: String) -> Xnode {
                             );
                         }
 
-                        if let Some(e) = as_client(&xnode_id, |client| {
+                        let req_xnode_id = xnode_id.clone();
+                        let container = reservation.secret;
+                        if let Err(e) = as_client(&xnode_id, |client| async move {
                             networking::request(
-                                client,
+                                &client,
                                 &networking::Request {
-                                    xnode_id: xnode_id.clone(),
+                                    xnode_id: req_xnode_id,
                                     request_type: networking::RequestType::Post {
                                         path: String::from("config/change"),
                                         body: vec![ConfigurationAction::Remove {
-                                            container: reservation.secret,
+                                            container,
                                             backup: false,
                                         }],
                                     },
                                 },
                             )
-                            .err()
-                        }) {
+                            .await
+                        })
+                        .await
+                        {
                             error!("Could not clean up demo xnode {}: {:?}", xnode_id, e)
                         }
 
@@ -102,8 +107,8 @@ pub fn get_xnode(xnode_id: String) -> Xnode {
     }
 }
 
-pub fn get_xnodes() -> Vec<Xnode> {
-    xnodes().into_iter().map(get_xnode).collect()
+pub async fn get_xnodes() -> Vec<Xnode> {
+    join_all(xnodes().into_iter().map(get_xnode)).await
 }
 
 pub fn path_safe_id(xnode_id: &str) -> String {
