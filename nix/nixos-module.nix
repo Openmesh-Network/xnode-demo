@@ -41,7 +41,7 @@ in
       };
 
       dataDir = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.path;
         default = "/var/lib/xnode-demo";
         example = "/var/lib/xnode-demo";
         description = ''
@@ -50,7 +50,7 @@ in
       };
 
       reservationsDir = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.path;
         default = "${cfg.dataDir}/reservation";
         example = "/var/lib/xnode-demo/reservation";
         description = ''
