@@ -15,3 +15,10 @@ impl ResponseError {
         }
     }
 }
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum Error {
+    XnodeManagerSDKError(xnode_manager_sdk::utils::Error),
+    EthSignError(ethsign::Error),
+}

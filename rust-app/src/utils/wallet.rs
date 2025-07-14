@@ -1,5 +1,4 @@
 use ethsign::SecretKey;
-use log::{error, info, warn};
 use rand::{rng, Rng};
 use std::fs::{read, write};
 
@@ -11,16 +10,18 @@ pub fn get_signer() -> SecretKey {
         Ok(secret) => secret
             .try_into()
             .inspect_err(|e| {
-                error!(
-                    "Private key {} in incorrect format: {:?}",
-                    path.display(),
-                    e
+                log::error!(
+                    "Private key {path} in incorrect format: {e:?}", // Might not be a good idea to log a potential private key
+                    path = path.display(),
                 );
             })
             .ok()
             .unwrap_or_else(generate_private_key),
         Err(e) => {
-            warn!("Could not read private key {}: {}", path.display(), e);
+            log::warn!(
+                "Could not read private key {path}: {e}",
+                path = path.display()
+            );
 
             generate_private_key()
         }
@@ -32,12 +33,15 @@ pub fn get_signer() -> SecretKey {
 }
 
 fn generate_private_key() -> [u8; 32] {
-    info!("Generating new secret key");
+    log::info!("Generating new secret key");
     let priv_key = random_bytes();
 
     let path = datadir().join("secret.key");
     if let Err(e) = write(&path, priv_key) {
-        error!("Could not save private key {}: {}", path.display(), e);
+        log::error!(
+            "Could not save private key {path}: {e}",
+            path = path.display()
+        );
     }
 
     priv_key

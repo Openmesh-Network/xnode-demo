@@ -71,17 +71,24 @@ in
         type = lib.types.listOf lib.types.str;
         default = [ ];
         example = [
-          "http://192.168.0.0:34391"
-          "https://google.com"
+          "xnode-manager.local"
+          "google.com"
+          "manager.xnode.openmesh.network"
         ];
         description = ''
-          The list of Xnode manager instances to give demo access to. Trailing slashes are not allowed.
+          The list of Xnode manager instances to give demo access to. Trailing slashes are not allowed. HTTPS is required.
         '';
       };
     };
   };
 
   config = lib.mkIf cfg.enable {
+    users.groups.xnode-demo = { };
+    users.users.xnode-demo = {
+      isSystemUser = true;
+      group = "xnode-demo";
+    };
+
     systemd.services.xnode-demo = {
       wantedBy = [ "multi-user.target" ];
       description = "Rust App.";
@@ -97,9 +104,9 @@ in
       };
       serviceConfig = {
         ExecStart = "${lib.getExe xnode-demo}";
-        User = "root";
-        Group = "root";
-        CacheDirectory = "rust-app";
+        User = "xnode-demo";
+        Group = "xnode-demo";
+        StateDirectory = "xnode-demo";
       };
     };
   };

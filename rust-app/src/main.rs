@@ -35,7 +35,11 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::permissive())
             .service(web::scope("/demo").configure(demo::configure))
     })
-    .bind(format!("{}:{}", hostname(), port()))?
+    .bind(format!(
+        "{hostname}:{port}",
+        hostname = hostname(),
+        port = port()
+    ))?
     .run()
     .await
 }

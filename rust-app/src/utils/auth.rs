@@ -1,78 +1,35 @@
-use actix_web::HttpResponse;
-use ethsign::Signature;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use std::{future::Future, sync::Arc, time::Duration};
+use hex::ToHex;
+use xnode_manager_sdk::utils::Session;
 
-use crate::utils::error::ResponseError;
+use crate::utils::{error::Error, time::get_time};
 
-use super::{
-    keccak::hash_message,
-    networking::{request, Request, RequestType},
-    wallet::get_signer,
-};
+use super::{keccak::hash_message, wallet::get_signer};
 
-#[derive(Serialize, Deserialize, Debug)]
-enum LoginMethod {
-    WalletSignature { v: u8, r: [u8; 32], s: [u8; 32] },
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Login {
-    pub login_method: LoginMethod,
-}
-
-pub async fn as_client<T, F, Fut>(xnode_id: &str, action: F) -> Result<T, HttpResponse>
-where
-    F: FnOnce(Arc<Client>) -> Fut,
-    Fut: Future<Output = Result<T, HttpResponse>>,
-{
-    let client = match Client::builder()
-        .cookie_store(true)
-        .timeout(Duration::from_secs(600))
-        .build()
-    {
-        Ok(c) => Arc::new(c),
-        Err(e) => {
-            log::error!("Could not build client: {}", e);
-            return Err(HttpResponse::InternalServerError().json(ResponseError::new(
-                "Networking client could not be created.",
-            )));
-        }
-    };
+pub async fn get_session(xnode_id: &str) -> Result<Session, Error> {
     let signer = get_signer();
-    let message = String::from("Create Xnode Manager session");
+
+    let addr: String = signer.public().address().encode_hex();
+    let user = format!("eth:{addr}");
+    let domain = xnode_id.to_string();
+    let timestamp = get_time();
+    let message = format!("Xnode Auth authenticate {domain} at {timestamp}");
     let message_bytes = hash_message(&message);
-    let signature: Signature = match signer.sign(&message_bytes) {
-        Ok(sig) => sig,
+    let signature = match signer.sign(&message_bytes) {
+        Ok(sig) => {
+            let bytes: Vec<u8> = sig.r.into_iter().chain(sig.s).chain([sig.v]).collect();
+            let hex: String = bytes.encode_hex();
+
+            format!("0x{hex}")
+        }
         Err(e) => {
-            log::error!("Could not sign login message {}: {}", message, e);
-            return Err(HttpResponse::InternalServerError()
-                .json(ResponseError::new("New configuration could not be signed.")));
+            return Err(Error::EthSignError(ethsign::Error::Secp256k1(e)));
         }
     };
 
-    request(
-        &client,
-        &Request {
-            xnode_id: xnode_id.to_string(),
-            request_type: RequestType::Post {
-                path: String::from("auth/login"),
-                body: &Login {
-                    login_method: LoginMethod::WalletSignature {
-                        v: signature.v,
-                        r: signature.r,
-                        s: signature.s,
-                    },
-                },
-            },
-        },
-    )
-    .await?;
-
-    let result = action(client.clone()).await;
-
-    let _logout_result = client.post(format!("{}/auth/logout", xnode_id)).send();
-
-    result
+    xnode_manager_sdk::auth::login(xnode_manager_sdk::auth::LoginInput {
+        base_url: format!("https://{domain}"),
+        user: xnode_manager_sdk::auth::User::with_signature(user, signature, timestamp.to_string()),
+    })
+    .await
+    .map_err(Error::XnodeManagerSDKError)
 }
