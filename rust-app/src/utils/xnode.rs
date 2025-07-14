@@ -50,13 +50,7 @@ pub async fn get_xnode(xnode_id: String) -> Xnode {
                     None
                 }
             },
-            Err(e) => {
-                log::error!(
-                    "Could not read reservation file {path}: {e}",
-                    path = path.display()
-                );
-                None
-            }
+            Err(_e) => None,
         },
     }
 }
