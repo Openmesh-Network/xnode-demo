@@ -1,5 +1,5 @@
 {
-  description = "Xnode demo trials";
+  description = "Application to let people run apps on Xnodes owned by this Xnode demo account.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";

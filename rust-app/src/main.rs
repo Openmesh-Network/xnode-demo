@@ -1,7 +1,7 @@
 use std::fs::create_dir_all;
 
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer};
+use actix_web::{App, HttpServer, web};
 use utils::env::{datadir, hostname, port, reservationsdir};
 
 mod demo;
@@ -15,16 +15,18 @@ async fn main() -> std::io::Result<()> {
     {
         let dir = datadir();
         create_dir_all(&dir).inspect_err(|e| {
-            log::error!("Could not create data dir at {}: {}", dir.display(), e)
+            log::error!(
+                "Could not create data dir at {dir}: {e}",
+                dir = dir.display()
+            )
         })?;
     }
     {
         let dir = reservationsdir();
         create_dir_all(&dir).inspect_err(|e| {
             log::error!(
-                "Could not create reservations dir at {}: {}",
-                dir.display(),
-                e
+                "Could not create reservations dir at {dir}: {e}",
+                dir = dir.display()
             )
         })?;
     }

@@ -91,7 +91,7 @@ in
 
     systemd.services.xnode-demo = {
       wantedBy = [ "multi-user.target" ];
-      description = "Rust App.";
+      description = "Application to let people run apps on Xnodes owned by this Xnode demo account.";
       after = [ "network.target" ];
       environment = {
         HOSTNAME = cfg.hostname;
