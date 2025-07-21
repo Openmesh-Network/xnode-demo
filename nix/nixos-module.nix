@@ -79,6 +79,14 @@ in
           The list of Xnode manager instances to give demo access to. Trailing slashes are not allowed. HTTPS is required.
         '';
       };
+
+      openFirewall = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Whether to open ports in the firewall for this application.
+        '';
+      };
     };
   };
 
@@ -108,6 +116,10 @@ in
         Group = "xnode-demo";
         StateDirectory = "xnode-demo";
       };
+    };
+
+    networking.firewall = lib.mkIf cfg.openFirewall {
+      allowedTCPPorts = [ cfg.port ];
     };
   };
 }
