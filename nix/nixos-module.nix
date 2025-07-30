@@ -115,6 +115,7 @@ in
         User = "xnode-demo";
         Group = "xnode-demo";
         StateDirectory = "xnode-demo";
+        Restart = "on-failure";
       };
     };
 
